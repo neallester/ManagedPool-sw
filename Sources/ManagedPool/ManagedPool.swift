@@ -1,5 +1,6 @@
 import Foundation
 
+@available(OSX 10.12, *)
 public struct PoolObject<T: AnyObject> {
     
     fileprivate init (_ object: T, pool: ManagedPool<T>) {
@@ -13,8 +14,9 @@ public struct PoolObject<T: AnyObject> {
 }
 
 /**
-    A thread safe pool of objects with internally managed expiration.
+    A tunable thread safe pool of objects with internally managed expiration.
 */
+@available(OSX 10.12, *)
 public class ManagedPool<T: AnyObject> {
     
     public typealias StatusReport = (checkedOut: Int, cached: Int, firstExpires: Date?, lastExpires: Date?)
@@ -24,36 +26,54 @@ public class ManagedPool<T: AnyObject> {
         case wrongPool
         case poolEmpty
         case creationError (Error)
+        case activationError (Error)
+        case deactivationError (Error)
     }
 
 /**
      - parameter capacity: The maximum number of objects which may be checked out at one time.
-     - parameter minimumPopulation: The minimum number of objects to retain in the population (cached + checked out). **Default = 0**
-     - parameter expiresAfter: Objects may be removed from the pool if they are not used within **expiresAfter** seconds of their checkIn. **Default = 300.0**
-     - parameter timeout: The maximum number of seconds clients will wait for an object in the pool to become available. **Default = 60.0**
+     - parameter minimumCached: The minimum number of objects to retain in the cache. Actual cache count may drop below this
+                 under high demand. **Default = 0**
+     - parameter reservedCacheCapacity: The initial capacity reserved for the cache beyond **minimumCached**.
+                 That is, initial cache reservedCapcity = (**minimumCached** + **reservedCacheCapcity**) or **capacity**,
+                 whichever is less. **Default = 30**.
+     - parameter idleTimeout: Objects will be removed from the pool if they are not used within **idleTimeout** seconds
+                 of their checkIn. 0.0 means objects live forever. **Default = 300.0**
+     - parameter timeout: The maximum number of seconds clients will wait for an object in the pool to become available.
+                 **Default = 60.0**
      - parameter onError: Closure to call when errors occur. The closure **must** be thread safe. **Default = nil**
-     - parameter activate: Closure to call just before the pool provides a client with an object which has been checked out. **Default = nil**
-     - parameter deactivate: Closure to call on an object which has been returned to the pool. The closure should return **true** if the object was succesfully deactivated. If the closure returns **false**, the object is not placed back in the pool's cache. **Default = nil**
-     - parameter destroy: Closure to call on an object just before it will be removed from the pool. **Default = nil**
-     - parameter create: Closure which creates new objects.
+     - parameter activate: Closure to call just before the pool provides a client with an object which has been checked out.
+                 **Default = nil**
+     - parameter deactivate: Closure to call on an object which has been returned to the pool. The closure should return **true**
+                 if the object was succesfully deactivated. If the closure returns **false**, the object is not placed back in the
+                 pool's cache. **Default = nil**
+     - parameter create: Closure which creates new objects. If **activate** and **deactivate** are provided, **create** should
+                 return objects in the deactivated state.
 */
-    public init (capacity: Int, minimumPopulation: Int = 0, expiresAfter: TimeInterval = 300.0, timeout: TimeInterval = 60.0, onError: ((ManagedPoolError) -> ())? = nil, activate: ((T) throws -> ())? = nil, deactivate: ((T) -> Bool)? = nil, destroy: ((T) -> ())? = nil, create: @escaping () throws -> T) {
-        precondition (capacity >= 1, "capacity >= 1")
-        precondition (minimumPopulation >= 0, "minimumPopulation >= 0")
-        precondition (minimumPopulation <= capacity, "minimumPopulation <= capacity")
+    public init (capacity: Int, minimumCached: Int = 0, reservedCacheCapacity: Int = 30, idleTimeout: TimeInterval = 300.0, timeout: TimeInterval = 60.0, onError: ((ManagedPoolError) -> ())? = nil, activate: ((T) throws -> ())? = nil, deactivate: ((T) throws -> ())? = nil, create: @escaping () throws -> T) {
+        precondition (capacity > 0, "capacity > 0")
+        precondition (minimumCached >= 0, "minimumCached >= 0")
+        precondition (minimumCached <= capacity, "minimumCached <= capacity")
+        precondition (reservedCacheCapacity >= 0, "reservedCacheCapacity >= 0")
+        precondition (idleTimeout >= 0.0, "idleTimeout >= 0.0")
+        precondition (timeout > 0.0, "timeout > 0.0")
         gate = DispatchSemaphore (value: capacity)
-        self.expiresAfter = expiresAfter
+        self.idleTimeout = idleTimeout
         self.timeout = timeout
         self.onError = onError
         self.activate = activate
         self.deactivate = deactivate
-        self.destroy = destroy
         self.create = create
         self.capacity = capacity
-        self.minimumPopulation = minimumPopulation
+        self.minimumCached = minimumCached
+        if (minimumCached + reservedCacheCapacity > capacity) {
+            cache.reserveCapacity(capacity)
+        } else {
+            cache.reserveCapacity(minimumCached + reservedCacheCapacity)
+        }
         queue.async {
             var exceptionOccurred = false
-            while !exceptionOccurred && self.population() < minimumPopulation {
+            while !exceptionOccurred && self.isCacheLow() {
                 do {
                     exceptionOccurred = !self.addToCache()
                 }
@@ -85,16 +105,29 @@ public class ManagedPool<T: AnyObject> {
                     }
                     
                 } else {
-                    result = cache.removeLast().object
+                    result = cache.removeFirst().object
+                }
+                if let activate = self.activate {
+                    do {
+                        try activate (result!)
+                    } catch {
+                        if let onError = self.onError {
+                            onError (.activationError (error))
+                            throw ManagedPool.ManagedPoolError.activationError (error)
+                        }
+                    }
+                    
+                }
+                checkedOut = checkedOut + 1
+                if checkedOut == capacity {
+                    if let onError = onError {
+                        onError(.poolEmpty)
+                    }
                 }
             }
-            if let activate = self.activate {
-                try activate (result!)
-            }
-            checkedOut = checkedOut + 1
-            if checkedOut == capacity {
-                if let onError = onError {
-                    onError(.poolEmpty)
+            queue.async {
+                if self.isCacheLow() {
+                    let _ = self.addToCache()
                 }
             }
             return PoolObject (result!, pool: self)
@@ -123,13 +156,17 @@ public class ManagedPool<T: AnyObject> {
         if poolObject.pool !== self, let onError = onError {
             onError (.wrongPool)
         }
-        queue.sync {
+        queue.async {
             var needsReplacement = !isOK
             if isOK {
-                if let deactivate = deactivate {
-                    if deactivate (poolObject.object) {
+                if let deactivate = self.deactivate {
+                    do {
+                       try deactivate (poolObject.object)
                         self.addToCache(poolObject.object)
-                    } else {
+                    } catch {
+                        if let onError = self.onError {
+                            onError (.deactivationError (error))
+                        }
                         needsReplacement = true
                     }
                 } else {
@@ -137,10 +174,12 @@ public class ManagedPool<T: AnyObject> {
                 }
             }
             if needsReplacement {
-                let _ = self.addToCache()
+                if self.isCacheLow() {
+                    let _ = self.addToCache()
+                }
             }
-            checkedOut = checkedOut - 1
-            gate.signal()
+            self.checkedOut = self.checkedOut - 1
+            self.gate.signal()
         }
     }
 /**
@@ -153,39 +192,62 @@ public class ManagedPool<T: AnyObject> {
             closure ((checkedOut: self.checkedOut, cached: self.cache.count, firstExires: cache.first?.expires, lastExpires: cache.last?.expires) as! (checkedOut: Int, cached: Int, firstExpires: Date?, lastExpires: Date?))
         }
     }
+    
+/**
+     Prepare for deinitialization. Failure to call this function before dereferencing a pool may cause a memory
+     leak due to the strong reference held by the dispatch job used to periodically prune the pool of stale objects in
+     the cache. Note that the invalidated pool will remain in memory until the existing dispatch job runs.
+*/
+    public func invalidate() {
+        queue.sync {
+            wasInvalidated = true
+            cache = []
+        }
+    }
 
     internal func status (closure: ((checkedOut: Int, cache: [(expires: Date, object: T)])) -> ()) {
         queue.sync {
             closure ((checkedOut: self.checkedOut, cache: cache))
         }
     }
-
-    private func prune() {
+    
+    // Check for and remove stale objects from the cache.
+    internal func prune() {
         queue.sync {
-            if
-                !self.cache.isEmpty &&
-                self.cache[0].expires.timeIntervalSince1970 < Date().timeIntervalSince1970 &&
-                self.population() > self.minimumPopulation
-            {
-                let removed = self.cache.removeFirst()
-                if let destroy = self.destroy {
-                    destroy (removed.object)
+            if !wasInvalidated {
+                if
+                    !self.cache.isEmpty &&
+                        self.idleTimeout > 0.0 &&
+                        self.cache[0].expires.timeIntervalSince1970 < Date().timeIntervalSince1970
+                {
+                    let _ = self.cache.removeFirst()
                 }
-            } else if self.population() < self.minimumPopulation {
-                let _ = addToCache()
-            }
-            if self.population() < self.minimumPopulation {
-                queue.asyncAfter(deadline: DispatchTime.now() + 2.0, execute: self.prune)
-            } else if self.population() == self.minimumPopulation {
-                queue.asyncAfter(deadline: DispatchTime.now() + expiresAfter, execute: self.prune)
-            } else {
-                let delay = self.cache.first!.expires.timeIntervalSince1970 - Date().timeIntervalSince1970 + 0.1
-                if delay < 0 {
-                    queue.async {
+                if self.isCacheLow() {
+                    let _ = self.addToCache()
+                }
+                if self.isCacheLow() {
+                    self.pruneQueue.async {
+                        self.prune()
+                    }
+                } else if self.idleTimeout == 0.0 {
+                    self.pruneQueue.asyncAfter (deadline: DispatchTime.now() + self.zeroIdleTimeoutPruneDelay()) {
+                        self.prune()
+                    }
+                } else if self.cache.isEmpty {
+                    self.pruneQueue.asyncAfter (deadline: DispatchTime.now() + self.idleTimeout) {
                         self.prune()
                     }
                 } else {
-                    queue.asyncAfter(deadline: DispatchTime.now() + delay, execute: self.prune)
+                    let delay = self.cache.first!.expires.timeIntervalSince1970 - Date().timeIntervalSince1970 + 0.1
+                    if delay <= 0.0 {
+                        self.pruneQueue.async {
+                            self.prune()
+                        }
+                    } else {
+                        self.pruneQueue.asyncAfter (deadline: DispatchTime.now() + delay) {
+                            self.prune()
+                        }
+                    }
                 }
             }
         }
@@ -195,11 +257,16 @@ public class ManagedPool<T: AnyObject> {
     public let capacity: Int
     
     /// The minimum number of objects to retain in the population (cached + checked out).
-    public let minimumPopulation: Int
+    public let minimumCached: Int
     
     // Not thread safe; must be called while on queue
     private func addToCache(_ object: T) {
-        self.cache.append((expires: Date(timeIntervalSince1970: Date().timeIntervalSince1970 + self.expiresAfter), object: object))
+        self.cache.append((expires: Date(timeIntervalSince1970: Date().timeIntervalSince1970 + self.idleTimeout), object: object))
+    }
+    
+    // Not Thread safe; must be called while on queue
+    private func isCacheLow() -> Bool {
+        return (cache.count < minimumCached) && ((cache.count + checkedOut) < capacity)
     }
     
     // Not thread safe; must be called while on queue
@@ -215,22 +282,24 @@ public class ManagedPool<T: AnyObject> {
         }
     }
     
-    // Not thread safe; must be called whle on queue
-    private func population() -> Int {
-        return cache.count + checkedOut
+    // Prune delay to use if idleTimeout == 0.0
+    private func zeroIdleTimeoutPruneDelay() -> TimeInterval {
+        return 300.0
     }
 
-    
-    private let activate: ((T) throws -> ())?
-    private let deactivate: ((T) -> Bool)?
-    private let destroy: ((T) -> ())?
-    private let gate: DispatchSemaphore
-    private let onError: ((ManagedPoolError) -> ())?
-    private let expiresAfter: TimeInterval
-    private let timeout: TimeInterval
-    private let create: () throws -> T
-    private let queue = DispatchQueue(label: "ManagedPool<\(T.self)>")
     private var cache: [(expires: Date, object: T)] = []
     private var checkedOut = 0
+    private var wasInvalidated = false
+    
+    internal let queue = DispatchQueue(label: "ManagedPool<\(T.self)>")
+    // prune must be executed on its own queue in order for TestManagedPool (which controls execution of prune) to work
+    internal let pruneQueue = DispatchQueue(label: "ManagedPool<\(T.self)>.prune")
+    private let activate: ((T) throws -> ())?
+    private let deactivate: ((T) throws -> ())?
+    private let gate: DispatchSemaphore
+    private let onError: ((ManagedPoolError) -> ())?
+    private let idleTimeout: TimeInterval
+    private let timeout: TimeInterval
+    private let create: () throws -> T
 
 }

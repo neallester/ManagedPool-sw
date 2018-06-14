@@ -8,6 +8,7 @@ extension ManagedPoolTests {
   static var allTests = [
     ("testBasicUsage", testBasicUsage),
     ("testTimeout", testTimeout),
+    ("testPrune", testPrune),
   ]
 }
 
