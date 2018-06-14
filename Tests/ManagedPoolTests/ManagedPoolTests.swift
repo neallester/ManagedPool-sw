@@ -195,7 +195,7 @@ final class ManagedPoolTests: XCTestCase {
     
     internal func testPrune() throws {
         
-        class TestManagedPool<T: AnyObject> : ManagedPool<T> {
+        class PruneGatedManagedPool<T: AnyObject> : ManagedPool<T> {
             
             // Create on main test thread
             public override init (capacity: Int, minimumCached: Int = 0, reservedCacheCapacity: Int = 30, idleTimeout: TimeInterval = 300.0, timeout: TimeInterval = 60.0, onError: ((ManagedPoolError) -> ())? = nil, activate: ((T) throws -> ())? = nil, deactivate: ((T) throws -> ())? = nil, create: @escaping () throws -> T) {
@@ -273,7 +273,7 @@ final class ManagedPoolTests: XCTestCase {
         let onError = { (error: ManagedPool<TestObject>.ManagedPoolError) in
             poolError = error
         }
-        let pool = TestManagedPool<TestObject>(capacity: 3, idleTimeout: 0.000001, onError: onError, create: newTestObject)
+        let pool = PruneGatedManagedPool<TestObject>(capacity: 3, idleTimeout: 0.000001, onError: onError, create: newTestObject)
         pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)])) in
             XCTAssertEqual (0, status.checkedOut)
             XCTAssertEqual (0, status.cache.count)

@@ -292,7 +292,7 @@ public class ManagedPool<T: AnyObject> {
     private var wasInvalidated = false
     
     internal let queue = DispatchQueue(label: "ManagedPool<\(T.self)>")
-    // prune must be executed on its own queue in order for TestManagedPool (which controls execution of prune) to work
+    // prune must be executed on its own queue in order for PruneGatedManagedPool (which controls execution of prune) to work
     internal let pruneQueue = DispatchQueue(label: "ManagedPool<\(T.self)>.prune")
     private let activate: ((T) throws -> ())?
     private let deactivate: ((T) throws -> ())?
