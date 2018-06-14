@@ -191,8 +191,105 @@ final class ManagedPoolTests: XCTestCase {
         XCTAssertEqual (id1.uuidString, object1!.object.id.uuidString)
     }
     
-    // TODO Test checkin !isOK
-    
+    func testCheckInNotOK () throws {
+        var poolError: ManagedPool<TestObject>.ManagedPoolError? = nil
+        let onError = { (error: ManagedPool<TestObject>.ManagedPoolError) in
+            poolError = error
+        }
+        let pool = ManagedPool<TestObject>(capacity: 3, onError: onError, create: newTestObject)
+        var ids = Set<UUID>()
+        var object1: PoolObject<TestObject>? = try pool.checkOut()
+        ids.insert(object1!.object.id)
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (1, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        XCTAssertNil (poolError)
+        pool.checkIn(object1!, isOK: false)
+        pool.queue.sync {}
+        XCTAssertNil (poolError)
+        object1 = nil
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (0, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        object1 = try pool.checkOut()
+        ids.insert(object1!.object.id)
+        var object2: PoolObject<TestObject>? = try pool.checkOut()
+        ids.insert(object2!.object.id)
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (2, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        XCTAssertNil (poolError)
+        pool.checkIn(object2!, isOK: false)
+        pool.queue.sync {}
+        object2 = nil
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (1, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        XCTAssertNil (poolError)
+        pool.checkIn(object1!, isOK: false)
+        pool.queue.sync {}
+        object1 = nil
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (0, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        XCTAssertNil (poolError)
+        object2 = try pool.checkOut()
+        XCTAssertFalse (ids.contains (object2!.object.id))
+        ids.insert(object2!.object.id)
+        object1 = try pool.checkOut()
+        XCTAssertFalse (ids.contains (object1!.object.id))
+        ids.insert(object1!.object.id)
+        XCTAssertNil (poolError)
+        var object3: PoolObject<TestObject>? = try pool.checkOut()
+        XCTAssertFalse (ids.contains(object3!.object.id))
+        ids.insert(object3!.object.id)
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (3, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        switch poolError! {
+        case .poolEmpty:
+            break
+        default:
+            XCTFail ("Expected .poolEmpty")
+        }
+        poolError = nil
+        pool.checkIn(object3!, isOK: false)
+        pool.checkIn(object2!, isOK: false)
+        pool.checkIn(object1!, isOK: false)
+        pool.queue.sync {}
+        XCTAssertNil (poolError)
+        object3 = nil
+        object2 = nil
+        object1 = nil
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (0, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        XCTAssertNil (poolError)
+        var object = try pool.checkOut()
+        
+        pool.checkIn(object, isOK: false)
+        pool.queue.sync {}
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (0, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+        object = try pool.checkOut()
+        XCTAssertFalse (ids.contains(object.object.id))
+        pool.checkIn(object, isOK: false)
+        pool.queue.sync {}
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)]))  in
+            XCTAssertEqual (0, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
+    }
+
     internal func testPrune() throws {
         
         class PruneGatedManagedPool<T: AnyObject> : ManagedPool<T> {
@@ -287,8 +384,14 @@ final class ManagedPoolTests: XCTestCase {
         XCTAssertNil (poolError)
         var object1: PoolObject<TestObject>? = try pool.checkOut()
         var object2: PoolObject<TestObject>? = try pool.checkOut()
+        pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)])) in
+            XCTAssertEqual (2, status.checkedOut)
+            XCTAssertEqual (0, status.cache.count)
+        }
         pool.checkIn(object1!)
+        object1 = nil
         pool.checkIn(object2!)
+        object2 = nil
         pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)])) in
             XCTAssertEqual (0, status.checkedOut)
             XCTAssertEqual (2, status.cache.count)
