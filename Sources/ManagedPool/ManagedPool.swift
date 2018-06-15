@@ -1,6 +1,5 @@
 import Foundation
 
-@available(OSX 10.12, *)
 public struct PoolObject<T: AnyObject> {
     
     fileprivate init (_ object: T, pool: ManagedPool<T>) {
@@ -16,7 +15,6 @@ public struct PoolObject<T: AnyObject> {
 /**
     A tunable thread safe pool of objects with internally managed expiration.
 */
-@available(OSX 10.12, *)
 public class ManagedPool<T: AnyObject> {
     
     public typealias StatusReport = (checkedOut: Int, cached: Int, firstExpires: Date?, lastExpires: Date?)
@@ -211,8 +209,13 @@ public class ManagedPool<T: AnyObject> {
             if !wasInvalidated {
                 if
                     !self.cache.isEmpty &&
-                        self.idleTimeout > 0.0 &&
-                        self.cache[0].expires.timeIntervalSince1970 < Date().timeIntervalSince1970
+                    self.idleTimeout > 0.0 &&
+                    self.cache[0].expires.timeIntervalSince1970 < Date().timeIntervalSince1970
+                {
+                    let _ = self.cache.removeFirst()
+                } else if
+                    self.idleTimeout == 0.0 &&
+                    self.cache.count > self.minimumCached
                 {
                     let _ = self.cache.removeFirst()
                 }
@@ -276,8 +279,8 @@ public class ManagedPool<T: AnyObject> {
         }
     }
     
-    // Prune delay to use if idleTimeout == 0.0
-    private func zeroIdleTimeoutPruneDelay() -> TimeInterval {
+    /// Prune delay in seconds to use if idleTimeout == 0.0 (descendants may override)
+    public func zeroIdleTimeoutPruneDelay() -> TimeInterval {
         return 300.0
     }
     

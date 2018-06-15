@@ -1,7 +1,6 @@
 import XCTest
 @testable import ManagedPool
 
-@available(OSX 10.12, *)
 final class ManagedPoolTests: XCTestCase {
     
     internal class TestObject {
@@ -485,11 +484,11 @@ final class ManagedPoolTests: XCTestCase {
         pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 5) {
             return TestObject()
         }
-        XCTAssertTrue (pool.cacheCapacity() >= 94)
+        XCTAssertTrue (pool.cacheCapacity() >= 65)
         pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 25) {
             return TestObject()
         }
-        XCTAssertTrue (pool.cacheCapacity() >= 94)
+        XCTAssertTrue (pool.cacheCapacity() >= 85)
         pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 50) {
             return TestObject()
         }
