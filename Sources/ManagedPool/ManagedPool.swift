@@ -71,16 +71,10 @@ public class ManagedPool<T: AnyObject> {
         } else {
             cache.reserveCapacity(minimumCached + reservedCacheCapacity)
         }
-        queue.async {
-            var exceptionOccurred = false
-            while !exceptionOccurred && self.isCacheLow() {
-                do {
-                    exceptionOccurred = !self.addToCache()
-                }
-            }
-        }
         self.prune()
+
     }
+    
 /**
      Obtain an object from the pool, waiting or creating a new object as needed.
      Client **must** use **checkIn()** to return object to the pool when finished with it.
@@ -285,6 +279,14 @@ public class ManagedPool<T: AnyObject> {
     // Prune delay to use if idleTimeout == 0.0
     private func zeroIdleTimeoutPruneDelay() -> TimeInterval {
         return 300.0
+    }
+    
+    internal func cacheCapacity() -> Int {
+        var result = 0
+        queue.sync {
+            result = cache.capacity
+        }
+        return result
     }
 
     private var cache: [(expires: Date, object: T)] = []

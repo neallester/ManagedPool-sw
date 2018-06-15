@@ -288,6 +288,7 @@ final class ManagedPoolTests: XCTestCase {
             XCTAssertEqual (0, status.checkedOut)
             XCTAssertEqual (0, status.cache.count)
         }
+        XCTAssertNil (poolError)
     }
 
     internal func testPrune() throws {
@@ -406,6 +407,109 @@ final class ManagedPoolTests: XCTestCase {
             XCTAssertEqual (0, status.checkedOut)
             XCTAssertEqual (0, status.cache.count)
         }
+    }
+    
+    func testCacheCapacity() {
+        
+        class NoCacheLoadPool<T: AnyObject> : ManagedPool<T> {
+            
+            override func prune() {}
+            
+        }
+        
+        var pool = NoCacheLoadPool<TestObject>(capacity: 10) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100) {
+            return TestObject()
+        }
+        XCTAssertEqual (30, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, reservedCacheCapacity: 5) {
+            return TestObject()
+        }
+        XCTAssertEqual (5, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, reservedCacheCapacity: 10) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, reservedCacheCapacity: 15) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, minimumCached: 10) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10) {
+            return TestObject()
+        }
+        XCTAssertEqual (40, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 90)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 100) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, minimumCached: 10, reservedCacheCapacity: 5) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+
+        pool = NoCacheLoadPool<TestObject>(capacity: 10, minimumCached: 10, reservedCacheCapacity: 15) {
+            return TestObject()
+        }
+        XCTAssertEqual (10, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10, reservedCacheCapacity: 5) {
+            return TestObject()
+        }
+        XCTAssertEqual (15, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10, reservedCacheCapacity: 25) {
+            return TestObject()
+        }
+        XCTAssertEqual (35, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10, reservedCacheCapacity: 50) {
+            return TestObject()
+        }
+        XCTAssertEqual (60, pool.cacheCapacity())
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10, reservedCacheCapacity: 100) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 10, reservedCacheCapacity: 150) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 5) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 94)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 25) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 94)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 50) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 100) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 60, reservedCacheCapacity: 150) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 100, reservedCacheCapacity: 5) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
+        pool = NoCacheLoadPool<TestObject>(capacity: 100, minimumCached: 100, reservedCacheCapacity: 100) {
+            return TestObject()
+        }
+        XCTAssertTrue (pool.cacheCapacity() >= 100)
     }
 
     func newTestObject() -> TestObject {

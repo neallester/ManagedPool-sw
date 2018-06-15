@@ -10,6 +10,7 @@ extension ManagedPoolTests {
     ("testTimeout", testTimeout),
     ("testCheckInNotOK ", testCheckInNotOK ),
     ("testPrune", testPrune),
+    ("testCacheCapacity", testCacheCapacity),
   ]
 }
 
