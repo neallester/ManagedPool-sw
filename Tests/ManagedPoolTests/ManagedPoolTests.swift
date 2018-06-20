@@ -513,41 +513,37 @@ final class ManagedPoolTests: XCTestCase {
     
     func testStatusReport() throws {
         let pool = ManagedPool<TestObject>(capacity: 3, create: newTestObject)
-        pool.status() { (status: ManagedPool.StatusReport) in
-            XCTAssertEqual (0, status.checkedOut)
-            XCTAssertEqual (0, status.cached)
-            XCTAssertNil (status.firstExpires)
-            XCTAssertNil (status.lastExpires)
-        }
+        var status = pool.status()
+        XCTAssertEqual (0, status.checkedOut)
+        XCTAssertEqual (0, status.cached)
+        XCTAssertNil (status.firstExpires)
+        XCTAssertNil (status.lastExpires)
         let o1 = try pool.checkOut()
-        pool.status() { (status: ManagedPool.StatusReport) in
-            XCTAssertEqual (1, status.checkedOut)
-            XCTAssertEqual (0, status.cached)
-            XCTAssertNil (status.firstExpires)
-            XCTAssertNil (status.lastExpires)
-        }
+        status = pool.status()
+        XCTAssertEqual (1, status.checkedOut)
+        XCTAssertEqual (0, status.cached)
+        XCTAssertNil (status.firstExpires)
+        XCTAssertNil (status.lastExpires)
         let o2 = try pool.checkOut()
-        pool.status() { (status: ManagedPool.StatusReport) in
-            XCTAssertEqual (2, status.checkedOut)
-            XCTAssertEqual (0, status.cached)
-            XCTAssertNil (status.firstExpires)
-            XCTAssertNil (status.lastExpires)
-        }
+        status = pool.status()
+        XCTAssertEqual (2, status.checkedOut)
+        XCTAssertEqual (0, status.cached)
+        XCTAssertNil (status.firstExpires)
+        XCTAssertNil (status.lastExpires)
+        status = pool.status()
         let now = Date().timeIntervalSince1970
         pool.checkIn(o1)
-        pool.status() { (status: ManagedPool.StatusReport) in
-            XCTAssertEqual (1, status.checkedOut)
-            XCTAssertEqual (1, status.cached)
-            XCTAssertEqual (status.firstExpires!.timeIntervalSince1970, status.lastExpires!.timeIntervalSince1970)
-            XCTAssertTrue (status.firstExpires!.timeIntervalSince1970 > now)
-        }
+        status = pool.status()
+        XCTAssertEqual (1, status.checkedOut)
+        XCTAssertEqual (1, status.cached)
+        XCTAssertEqual (status.firstExpires!.timeIntervalSince1970, status.lastExpires!.timeIntervalSince1970)
+        XCTAssertTrue (status.firstExpires!.timeIntervalSince1970 > now)
         pool.checkIn(o2)
-        pool.status() { (status: ManagedPool.StatusReport) in
-            XCTAssertEqual (0, status.checkedOut)
-            XCTAssertEqual (2, status.cached)
-            XCTAssertTrue (status.firstExpires!.timeIntervalSince1970 < status.lastExpires!.timeIntervalSince1970)
-            XCTAssertTrue (status.lastExpires!.timeIntervalSince1970 > now)
-        }
+        status = pool.status()
+        XCTAssertEqual (0, status.checkedOut)
+        XCTAssertEqual (2, status.cached)
+        XCTAssertTrue (status.firstExpires!.timeIntervalSince1970 < status.lastExpires!.timeIntervalSince1970)
+        XCTAssertTrue (status.lastExpires!.timeIntervalSince1970 > now)
     }
 
     func newTestObject() -> TestObject {

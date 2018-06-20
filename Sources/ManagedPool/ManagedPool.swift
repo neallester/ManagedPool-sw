@@ -179,10 +179,12 @@ public class ManagedPool<T: AnyObject> {
      
      - parameter closure: A closure which accepts a Tuple of type ManagedPool.StatusReport: (checkedOut: Int, cached: Int, firstExpires: Date?, lastExpires: Date?)
 */
-    public func status (closure: (ManagedPool.StatusReport) -> ()) {
+    public func status () -> ManagedPool.StatusReport {
+        var result: ManagedPool.StatusReport? = nil
         queue.sync {
-            closure ((checkedOut: self.checkedOut, cached: self.cache.count, firstExpires: cache.first?.expires, lastExpires: cache.last?.expires))
+            result = (checkedOut: self.checkedOut, cached: self.cache.count, firstExpires: cache.first?.expires, lastExpires: cache.last?.expires)
         }
+        return result!
     }
     
 /**
