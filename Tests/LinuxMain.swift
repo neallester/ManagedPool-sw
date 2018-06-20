@@ -11,6 +11,7 @@ extension ManagedPoolTests {
     ("testCheckInNotOK ", testCheckInNotOK ),
     ("testPrune", testPrune),
     ("testCacheCapacity", testCacheCapacity),
+    ("testStatusReport", testStatusReport),
   ]
 }
 

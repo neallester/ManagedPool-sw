@@ -181,7 +181,7 @@ public class ManagedPool<T: AnyObject> {
 */
     public func status (closure: (ManagedPool.StatusReport) -> ()) {
         queue.sync {
-            closure ((checkedOut: self.checkedOut, cached: self.cache.count, firstExires: cache.first?.expires, lastExpires: cache.last?.expires) as! ManagedPool.StatusReport)
+            closure ((checkedOut: self.checkedOut, cached: self.cache.count, firstExpires: cache.first?.expires, lastExpires: cache.last?.expires))
         }
     }
     
