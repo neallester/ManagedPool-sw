@@ -10,8 +10,16 @@ extension ManagedPoolTests {
     ("testTimeout", testTimeout),
     ("testCheckInNotOK ", testCheckInNotOK ),
     ("testPrune", testPrune),
+    ("testPruneImmortal", testPruneImmortal),
+    ("testPruneWithMinimumCacheSize", testPruneWithMinimumCacheSize),
+    ("testPruneWithMinimumCacheSizeImmortal", testPruneWithMinimumCacheSizeImmortal),
+    ("testActivateDeactivate", testActivateDeactivate),
+    ("testInitError", testInitError),
+    ("testActivationError", testActivationError),
+    ("testDeactivationError", testDeactivationError),
     ("testCacheCapacity", testCacheCapacity),
     ("testStatusReport", testStatusReport),
+    ("testIsCached", testIsCached),
   ]
 }
 

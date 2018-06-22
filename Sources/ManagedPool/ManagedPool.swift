@@ -22,6 +22,7 @@ public class ManagedPool<T: AnyObject> {
     public enum ManagedPoolError : Error {
         case timeout
         case wrongPool
+        case alreadyCached
         case poolEmpty
         case creationError (Error)
         case activationError (Error)
@@ -39,6 +40,8 @@ public class ManagedPool<T: AnyObject> {
                  of their checkIn. 0.0 means objects live forever. **Default = 300.0**
      - parameter timeout: The maximum number of seconds clients will wait for an object in the pool to become available.
                  **Default = 60.0**
+     - parameter zeroIdleTimeoutPruneInterval: Interval for cache prune operations if idleTimeout is 0.0.
+                 Ignored if idleTimeout > 0.0. **Default = 60.0**
      - parameter onError: Closure to call when errors occur. The closure **must** be thread safe. **Default = nil**
      - parameter activate: Closure to call just before the pool provides a client with an object which has been checked out.
                  **Default = nil**
@@ -48,16 +51,18 @@ public class ManagedPool<T: AnyObject> {
      - parameter create: Closure which creates new objects. If **activate** and **deactivate** are provided, **create** should
                  return objects in the deactivated state.
 */
-    public init (capacity: Int, minimumCached: Int = 0, reservedCacheCapacity: Int = 30, idleTimeout: TimeInterval = 300.0, timeout: TimeInterval = 60.0, onError: ((ManagedPoolError) -> ())? = nil, activate: ((T) throws -> ())? = nil, deactivate: ((T) throws -> ())? = nil, create: @escaping () throws -> T) {
+    public init (capacity: Int, minimumCached: Int = 0, reservedCacheCapacity: Int = 30, idleTimeout: TimeInterval = 300.0, timeout: TimeInterval = 60.0, zeroIdleTimeoutPruneInterval: TimeInterval = 60, onError: ((ManagedPoolError) -> ())? = nil, activate: ((T) throws -> ())? = nil, deactivate: ((T) throws -> ())? = nil, create: @escaping () throws -> T) {
         precondition (capacity > 0, "capacity > 0")
         precondition (minimumCached >= 0, "minimumCached >= 0")
         precondition (minimumCached <= capacity, "minimumCached <= capacity")
         precondition (reservedCacheCapacity >= 0, "reservedCacheCapacity >= 0")
         precondition (idleTimeout >= 0.0, "idleTimeout >= 0.0")
         precondition (timeout > 0.0, "timeout > 0.0")
+        precondition (zeroIdleTimeoutPruneInterval > 0.0, "zeroIdleTimeoutPruneInterval > 0.0")
         gate = DispatchSemaphore (value: capacity)
         self.idleTimeout = idleTimeout
         self.timeout = timeout
+        self.zeroIdleTimeoutPruneInterval = zeroIdleTimeoutPruneInterval
         self.onError = onError
         self.activate = activate
         self.deactivate = deactivate
@@ -144,10 +149,11 @@ public class ManagedPool<T: AnyObject> {
      - precondition: poolObject was initially checked out from this pool.
 */
     public func checkIn (_ poolObject: PoolObject<T>, isOK: Bool = true) {
-        precondition (poolObject.pool === self, "poolObject is from the wrong pool")
+        assert (poolObject.pool === self, "poolObject is from the wrong pool")
         if poolObject.pool !== self, let onError = onError {
             onError (.wrongPool)
         }
+        assert (!isCached(poolObject.object), "!isCached(poolObject.object)")
         queue.async {
             var needsReplacement = !isOK
             if isOK {
@@ -229,7 +235,7 @@ public class ManagedPool<T: AnyObject> {
                         self.prune()
                     }
                 } else if self.idleTimeout == 0.0 {
-                    self.pruneQueue.asyncAfter (deadline: DispatchTime.now() + self.zeroIdleTimeoutPruneDelay()) {
+                    self.pruneQueue.asyncAfter (deadline: DispatchTime.now() + self.zeroIdleTimeoutPruneInterval) {
                         self.prune()
                     }
                 } else if self.cache.isEmpty {
@@ -281,11 +287,6 @@ public class ManagedPool<T: AnyObject> {
         }
     }
     
-    /// Prune delay in seconds to use if idleTimeout == 0.0 (descendants may override)
-    public func zeroIdleTimeoutPruneDelay() -> TimeInterval {
-        return 300.0
-    }
-    
     internal func cacheCapacity() -> Int {
         var result = 0
         queue.sync {
@@ -293,10 +294,23 @@ public class ManagedPool<T: AnyObject> {
         }
         return result
     }
+    
+    internal func isCached (_ object: T) -> Bool {
+        var result = false
+        queue.sync {
+            for cacheItem in cache {
+                if cacheItem.object === object {
+                    result = true
+                }
+            }
+        }
+        return result
+    }
 
     private var cache: [(expires: Date, object: T)] = []
     private var checkedOut = 0
     private var wasInvalidated = false
+    
     
     internal let queue = DispatchQueue(label: "ManagedPool<\(T.self)>")
     // prune must be executed on its own queue in order for PruneGatedManagedPool (which controls execution of prune) to work
@@ -307,6 +321,7 @@ public class ManagedPool<T: AnyObject> {
     private let onError: ((ManagedPoolError) -> ())?
     private let idleTimeout: TimeInterval
     private let timeout: TimeInterval
+    private let zeroIdleTimeoutPruneInterval: TimeInterval
     private let create: () throws -> T
 
 }
