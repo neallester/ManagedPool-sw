@@ -45,9 +45,8 @@ public class ManagedPool<T: AnyObject> {
      - parameter onError: Closure to call when errors occur. The closure **must** be thread safe. **Default = nil**
      - parameter activate: Closure to call just before the pool provides a client with an object which has been checked out.
                  **Default = nil**
-     - parameter deactivate: Closure to call on an object which has been returned to the pool. The closure should return **true**
-                 if the object was succesfully deactivated. If the closure returns **false**, the object is not placed back in the
-                 pool's cache. **Default = nil**
+     - parameter deactivate: Closure to call on an object which has been returned to the pool. If deactivate throws an error
+                 the object is not placed back in the pool's cache. **Default = nil**
      - parameter create: Closure which creates new objects. If **activate** and **deactivate** are provided, **create** should
                  return objects in the deactivated state.
 */
