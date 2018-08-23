@@ -22,7 +22,6 @@ public class ManagedPool<T: AnyObject> {
     public enum ManagedPoolError : Error {
         case timeout
         case wrongPool
-        case alreadyCached
         case poolEmpty
         case creationError (Error)
         case activationError (Error)
