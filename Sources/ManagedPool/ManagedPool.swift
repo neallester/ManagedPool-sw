@@ -209,7 +209,7 @@ public class ManagedPool<T: AnyObject> {
         }
     }
     
-    // Check for and remove stale objects from the cache.
+    // Check for and remove any stale objects from the cache.
     internal func prune() {
         queue.sync {
             if !wasInvalidated {
