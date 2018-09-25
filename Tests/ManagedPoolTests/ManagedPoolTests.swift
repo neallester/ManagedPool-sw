@@ -921,7 +921,7 @@ final class ManagedPoolTests: XCTestCase {
         pool = NoCacheLoadPool<TestObject>(capacity: 10, minimumCached: 10, reservedCacheCapacity: 5) {
             return TestObject()
         }
-        XCTAssertEqual (10, pool.cacheCapacity())
+        XCTAssertTrue (pool.cacheCapacity() >= 10)
 
         pool = NoCacheLoadPool<TestObject>(capacity: 10, minimumCached: 10, reservedCacheCapacity: 15) {
             return TestObject()
