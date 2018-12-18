@@ -386,7 +386,7 @@ final class ManagedPoolTests: XCTestCase {
         let onError = { (error: ManagedPool<TestObject>.ManagedPoolError) in
             poolError = error
         }
-        let pool = PruneGatedManagedPool<TestObject>(capacity: 6, minimumCached: 3, idleTimeout: 0.01, onError: onError, create: newTestObject)
+        let pool = PruneGatedManagedPool<TestObject>(capacity: 6, minimumCached: 3, idleTimeout: 0.5, onError: onError, create: newTestObject)
         pool.status() { (status: (checkedOut: Int, cache: [(expires: Date, object: TestObject)])) in
             XCTAssertEqual (0, status.checkedOut)
             XCTAssertEqual (1, status.cache.count)
